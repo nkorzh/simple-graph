@@ -7,37 +7,59 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
-    private static final String EXIT = "exit";
-    private static final String LOAD = "load";
-    private static final String CREATE = "create";
-    private static final String SAVE = "save";
     private static final String YES = "yes";
-    private static final String ALL = "all";
-    private static final String CHILDREN = "pe";
-    private static final String CHECK_EDGE = "ce";
-    private static final String ADD_EDGE = "ae";
-    private static final String ADD_NODE = "an";
-    private static final String DEL_EDGE = "de";
 
-    private static final Map<String, String> commandsMap = Map.of(
-            EXIT, "exit",
-            LOAD, "load graph from file",
-            CREATE, "create empty graph",
-            SAVE, "save to file",
-            ALL, "print all nodes",
-            CHILDREN, "print children of node",
-            CHECK_EDGE, "check if edge (<parent>, <child>) exists",
-            ADD_EDGE, "add <child> to <parent> node list",
-            ADD_NODE, "create new node");
+    private enum Command {
+        DEFAULT("", "Unknown command"),
+        EXIT("exit", "exit"),
+        ALL("all", "print all nodes"),
+        LOAD("load", "load graph from file"),
+        CREATE("create", "create empty graph"),
+        SAVE("save", "save to file"),
+        CHILDREN("pe", "print children of node"),
+        CHECK_EDGE("ce", "check if edge (<parent>, <child>) exists"),
+        ADD_EDGE("ae", "add <child> to <parent> node list"),
+        ADD_NODE("an", "create new node"),
+        DELETE_EDGE("de", "delete edge"),
+        DELETE_NODE("dn", "delete node");
+
+        public final String value;
+        public final String description;
+
+        Command(String value, String description) {
+            this.value = value;
+            this.description = description;
+        }
+
+        public static Command parseCommand(String commandName) {
+            for (Command command : Command.values()) {
+                if (command.value.equals(commandName))
+                    return command;
+            }
+            return DEFAULT;
+        }
+
+        public static void printCommands() {
+            final Command[] commands = Command.values();
+            for (int i = 1; i < commands.length; i++) {
+                System.out.println(commands[i].value + " - " + commands[i].description);
+            }
+        }
+    }
 
     private static Graph graph = null;
     private static boolean haveUnsaved = false;
     private static boolean isLoaded = false;
     private static Scanner input;
+
+    private static void printAllNodes() {
+        List<String> nodes = graph.getAllNodes();
+        nodes.forEach(Main::printName);
+        printAmount(nodes.size());
+    }
 
     private static void load() {
         try {
@@ -47,9 +69,9 @@ public class Main {
             isLoaded = true;
             System.out.println("Graph is loaded.");
         } catch (final InvalidPathException e) {
-            System.out.println("Invalid path: " + e.getMessage());
+            System.err.println("Invalid path: " + e.getMessage());
         } catch (final IOException e) {
-            System.out.println("Error loading graph: " + e.getMessage());
+            System.err.println("Error loading graph: " + e.getMessage());
         }
     }
 
@@ -67,9 +89,9 @@ public class Main {
             haveUnsaved = false;
             System.out.println("Saved to " + path.toAbsolutePath());
         } catch (final InvalidPathException e) {
-            System.out.println("Invalid path: " + e.getMessage());
+            System.err.println("Invalid path: " + e.getMessage());
         } catch (final IOException e) {
-            System.out.println("Error saving graph: " + e.getMessage());
+            System.err.println("Error saving graph: " + e.getMessage());
         }
     }
 
@@ -104,8 +126,77 @@ public class Main {
 
     private static void printCommands() {
         System.out.println(String.format("Available commands:%n"));
-        commandsMap.forEach((key, value) -> System.out.println(key + " - " + value));
+        Command.printCommands();
         System.out.println(String.format("%nWrite your command:"));
+    }
+
+    private static void printChildren() {
+        System.out.println("Enter parent node name:");
+        List<String> children;
+        final String nodeName = input.nextLine();
+        try {
+            children = graph.getChildren(nodeName);
+        } catch (final IOException e) {
+            System.err.println("Error getting children of '" + nodeName + "': " + e.getMessage());
+            return;
+        }
+        System.out.println("Children are:");
+        children.forEach(Main::printName);
+        printAmount(children.size());
+    }
+
+    private static void checkEdge() {
+        System.out.println("Enter parent and child node names divided by Enter:");
+        try {
+            System.out.println(graph.isEdge(input.nextLine(), input.nextLine()) ?
+                    "Edge exists" :
+                    "No edge");
+        } catch (IOException e) {
+            System.err.println("Can't find nodes: " + e.getMessage());
+        }
+    }
+
+    private static void addEdge() {
+        System.out.println("Enter parent and child node names divided by Enter:");
+        try {
+            System.out.println(graph.addEdge(input.nextLine(), input.nextLine()) ? "Success." : "Failed.");
+        } catch (final IOException e) {
+            System.err.println("Can't add edge: " + e.getMessage());
+            return;
+        }
+        haveUnsaved = true;
+    }
+
+    private static void addNode() {
+        System.out.println("Enter new node name:");
+        try {
+            graph.addNode(input.nextLine());
+            System.out.println("Success.");
+        } catch (IOException e) {
+            System.err.println("Can't add node: " + e.getMessage());
+        }
+        haveUnsaved = true;
+    }
+
+    private static void deleteEdge() {
+        System.out.println("Enter parent and child node names divided by Enter:");
+        try {
+            System.out.println(graph.removeEdge(input.nextLine(), input.nextLine()) ?
+                    "Edge removed." :
+                    "Edge did not exist.");
+        } catch (final IOException e) {
+            System.err.println("Error removing edge: " + e.getMessage());
+        }
+    }
+
+    private static void deleteNode() {
+        System.out.println("Enter node name:");
+        try {
+            graph.removeNode(input.nextLine());
+            System.out.println("Deleted.");
+        } catch (final IOException e) {
+            System.err.println("Can't delete node: " + e.getMessage());
+        }
     }
 
     public static void main(String[] args) {
@@ -113,8 +204,7 @@ public class Main {
         System.out.println("Graph query application started.");
         printCommands();
         while (true) {
-            String command = input.nextLine();
-            switch (command) {
+            switch (Command.parseCommand(input.nextLine())) {
                 case EXIT:
                     if (confirmUnsaved()) {
                         return;
@@ -135,48 +225,38 @@ public class Main {
                     break;
                 case ALL:
                     if (isLoaded()) {
-                        List<String> nodes = graph.getAllNodes();
-                        nodes.forEach(Main::printName);
-                        printAmount(nodes.size());
+                        printAllNodes();
                     }
                     break;
                 case CHILDREN:
                     if (isLoaded()) {
-                        System.out.println("Enter parent node name:");
-                        List<String> children = graph.getChildren(input.nextLine());
-                        System.out.println("Children are:");
-                        children.forEach(Main::printName);
-                        printAmount(children.size());
+                        printChildren();
                     }
                     break;
                 case CHECK_EDGE:
                     if (isLoaded()) {
-                        System.out.println("Enter parent and child node names divided by Enter:");
-                        System.out.println(graph.isEdge(input.nextLine(), input.nextLine()) ?
-                                "Edge exists" :
-                                "No edge");
+                        checkEdge();
                     }
                     break;
                 case ADD_EDGE:
                     if (isLoaded()) {
-                        System.out.println("Enter parent and child node names divided by Enter:");
-                        System.out.println(graph.addEdge(input.nextLine(), input.nextLine()) ? "Success" : "Failed.");
-                        haveUnsaved = true;
+                        addEdge();
                     }
                     break;
                 case ADD_NODE:
                     if (isLoaded()) {
-                        System.out.println("Enter new node name:");
-                        System.out.println(graph.addNode(input.nextLine()) ? "Success." : "Failed.");
-                        haveUnsaved = true;
+                        addNode();
                     }
                     break;
-                case DEL_EDGE:
+                case DELETE_EDGE:
                     if (isLoaded()) {
-                        System.out.println("Enter parent and child node names divided by Enter:");
-                        graph.removeEdge(input.nextLine(), input.nextLine());
+                        deleteEdge();
                     }
-                default:
+                case DELETE_NODE:
+                    if (isLoaded()) {
+                        deleteNode();
+                    }
+                case DEFAULT:
                     System.out.println("Unexpected command.");
                     printCommands();
                     break;
